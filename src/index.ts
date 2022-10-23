@@ -104,7 +104,7 @@ async function download_video_batches() {
             new Array();
         for (let video of batch.items) {
             const video_id = video.id;
-            if (video_ids.get(video_id) !== undefined && video.durationSec! < MIN_MINUTES) {
+            if (video_ids.get(video_id) === undefined && video.durationSec! < MIN_MINUTES) {
                 download_videos_promises.push(download_video(video_id));
                 ffmpeg_functions.push(extract_frames(video_id));
             }
