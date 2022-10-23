@@ -79,7 +79,16 @@ function extract_frames(video_id: string) {
     };
 }
 
-async function main() {
+const video_ids: Map<string, boolean> = new Map();
+
+async function retrieve_previous_video_ids() {
+    const video_id_dir = await fs.readdir(FRAMES_DIRECTORY);
+    for (let video_id in video_id_dir) {
+        video_ids.set(video_id, true)
+    }
+}
+
+async function download_video_batches() {
     let batch_count = 1;
     let batch: ytpl.Result | ytpl.ContinueResult = await ytpl(
         'https://www.youtube.com/c/StatsRoyale',
@@ -94,8 +103,8 @@ async function main() {
         let ffmpeg_functions: Array<(_callback: () => void) => Promise<void>> =
             new Array();
         for (let video of batch.items) {
-            if (video.durationSec! < MIN_MINUTES) {
-                const video_id = video.id;
+            const video_id = video.id;
+            if (video_ids.get(video_id) !== undefined && video.durationSec! < MIN_MINUTES) {
                 download_videos_promises.push(download_video(video_id));
                 ffmpeg_functions.push(extract_frames(video_id));
             }
@@ -128,5 +137,10 @@ async function main() {
         batch = await ytpl.continueReq(batch.continuation!);
         batch_count++;
     } while (batch.continuation);
+}
+
+async function main() {
+    await retrieve_previous_video_ids();
+    await download_video_batches();
 }
 main();
