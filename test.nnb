@@ -1,0 +1,39 @@
+{
+    "cells": [
+        {
+            "language": "typescript",
+            "source": [
+                "async function printMessage(message: string) {\r\n    return async (_callback: () => void) => {\r\n        console.log(message);\r\n        _callback()\r\n    }\r\n}"
+            ],
+            "outputs": []
+        },
+        {
+            "language": "typescript",
+            "source": [
+                "function delay(ms: number) {\r\n\treturn new Promise(resolve => setTimeout(resolve, ms));\r\n}"
+            ],
+            "outputs": []
+        },
+        {
+            "language": "typescript",
+            "source": [
+                "async function main() {\r\n  const ffmpeg_functions = new Array();\r\n  const AMOUNT = 100;\r\n  for (let i = 0; i < AMOUNT; i++) {\r\n    ffmpeg_functions.push(printMessage(i.toString()));\r\n  }\r\n  const FFMPEG_AT_A_TIME = 5;\r\n  for (let i = 0; i < AMOUNT + FFMPEG_AT_A_TIME; i += FFMPEG_AT_A_TIME) {\r\n    let print_promises: Array<Promise<void>> = new Array();\r\n    for (\r\n      let ffmpeg_index = i;\r\n      ffmpeg_index < Math.min(i + FFMPEG_AT_A_TIME, AMOUNT);\r\n      ffmpeg_index++\r\n    ) {\r\n      print_promises.push(\r\n        new Promise((resolve) => {\r\n          ffmpeg_functions[ffmpeg_index](() => resolve);\r\n        })\r\n      );\r\n    }\r\n    await Promise.all(print_promises);\r\n    delay(1000);\r\n  }\r\n}\r\nmain();\r\n"
+            ],
+            "outputs": []
+        },
+        {
+            "language": "typescript",
+            "source": [
+                ""
+            ],
+            "outputs": []
+        },
+        {
+            "language": "typescript",
+            "source": [
+                ""
+            ],
+            "outputs": []
+        }
+    ]
+}
