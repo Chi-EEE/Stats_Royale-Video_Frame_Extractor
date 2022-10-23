@@ -4,6 +4,7 @@ import { createWriteStream, promises as fs } from 'fs';
 import ytdl from 'ytdl-core';
 import ytpl from 'ytpl';
 import {
+    delay,
     FFMPEG_AT_A_TIME,
     FRAMES_DIRECTORY,
     MIN_MINUTES,
@@ -79,12 +80,20 @@ function extract_frames(video_id: string) {
     };
 }
 
-const video_ids: Map<string, boolean> = new Map();
+const download_video_ids: Map<string, boolean> = new Map();
+const frame_video_ids: Map<string, boolean> = new Map();
 
-async function retrieve_previous_video_ids() {
+async function retrieve_previous_video_download_created() {
+    const video_id_dir = await fs.readdir(VIDEOS_DIRECTORY);
+    for (let video_id in video_id_dir) {
+        download_video_ids.set(video_id.slice(0, -4), true)
+    }
+}
+
+async function retrieve_previous_video_frames_created() {
     const video_id_dir = await fs.readdir(FRAMES_DIRECTORY);
     for (let video_id in video_id_dir) {
-        video_ids.set(video_id, true)
+        frame_video_ids.set(video_id, true)
     }
 }
 
@@ -104,8 +113,10 @@ async function download_video_batches() {
             new Array();
         for (let video of batch.items) {
             const video_id = video.id;
-            if (video_ids.get(video_id) === undefined && video.durationSec! < MIN_MINUTES) {
-                download_videos_promises.push(download_video(video_id));
+            if (frame_video_ids.get(video_id) === undefined && video.durationSec! < MIN_MINUTES) {
+                if (download_video_ids.get(video_id) === undefined) {
+                    download_videos_promises.push(download_video(video_id));
+                }
                 ffmpeg_functions.push(extract_frames(video_id));
             }
         }
@@ -136,11 +147,13 @@ async function download_video_batches() {
         console.log(`Completed batch: ${batch_count}`);
         batch = await ytpl.continueReq(batch.continuation!);
         batch_count++;
+        delay(5000)
     } while (batch.continuation);
 }
 
 async function main() {
-    await retrieve_previous_video_ids();
+    await retrieve_previous_video_frames_created();
+    await retrieve_previous_video_download_created();
     await download_video_batches();
 }
 main();
