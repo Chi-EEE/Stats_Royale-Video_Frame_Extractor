@@ -97,6 +97,48 @@ async function retrieve_previous_video_frames_created() {
     }
 }
 
+async function action_on_batch(batch: ytpl.Result | ytpl.ContinueResult, batch_count: number) {
+    console.log(`Starting batch: ${batch_count}`);
+    let download_videos_promises: Array<Promise<void>> =
+        new Array();
+    let ffmpeg_functions: Array<(_callback: () => void) => Promise<void>> =
+        new Array();
+    for (let video of batch.items) {
+        const video_id = video.id;
+        if (frame_video_ids.get(video_id) === undefined && video.durationSec! < MIN_MINUTES) {
+            if (download_video_ids.get(video_id) === undefined) {
+                download_videos_promises.push(download_video(video_id));
+            }
+            ffmpeg_functions.push(extract_frames(video_id));
+        }
+    }
+    console.log(`Downloading videos for batch: ${batch_count}`);
+    await Promise.allSettled(download_videos_promises);
+    console.log(`Completed downloading for batch: ${batch_count}`);
+    for (
+        let i = 0;
+        i < ffmpeg_functions.length + FFMPEG_AT_A_TIME;
+        i += FFMPEG_AT_A_TIME
+    ) {
+        let ffmpeg_promises: Array<Promise<void>> = new Array();
+        // Limit the FFMPEG functions so it will run every "FFMPEG_AT_A_TIME"
+        for (
+            let ffmpeg_index = i;
+            ffmpeg_index <
+            Math.min(i + FFMPEG_AT_A_TIME, ffmpeg_functions.length);
+            ffmpeg_index++
+        ) {
+            ffmpeg_promises.push(
+                new Promise((resolve) => {
+                    ffmpeg_functions[ffmpeg_index](() => resolve());
+                })
+            );
+        }
+        await Promise.allSettled(ffmpeg_promises);
+    }
+    console.log(`Completed batch: ${batch_count}`);
+}
+
 async function download_video_batches() {
     let batch_count = 1;
     let batch: ytpl.Result | ytpl.ContinueResult = await ytpl(
@@ -105,50 +147,14 @@ async function download_video_batches() {
             pages: 1
         }
     );
-    do {
-        console.log(`Starting batch: ${batch_count}`);
-        let download_videos_promises: Array<Promise<void>> =
-            new Array();
-        let ffmpeg_functions: Array<(_callback: () => void) => Promise<void>> =
-            new Array();
-        for (let video of batch.items) {
-            const video_id = video.id;
-            if (frame_video_ids.get(video_id) === undefined && video.durationSec! < MIN_MINUTES) {
-                if (download_video_ids.get(video_id) === undefined) {
-                    download_videos_promises.push(download_video(video_id));
-                }
-                ffmpeg_functions.push(extract_frames(video_id));
-            }
-        }
-        console.log(`Downloading videos for batch: ${batch_count}`);
-        await Promise.allSettled(download_videos_promises);
-        console.log(`Completed downloading for batch: ${batch_count}`);
-        for (
-            let i = 0;
-            i < ffmpeg_functions.length + FFMPEG_AT_A_TIME;
-            i += FFMPEG_AT_A_TIME
-        ) {
-            let ffmpeg_promises: Array<Promise<void>> = new Array();
-            // Limit the FFMPEG functions so it will run every "FFMPEG_AT_A_TIME"
-            for (
-                let ffmpeg_index = i;
-                ffmpeg_index <
-                Math.min(i + FFMPEG_AT_A_TIME, ffmpeg_functions.length);
-                ffmpeg_index++
-            ) {
-                ffmpeg_promises.push(
-                    new Promise((resolve) => {
-                        ffmpeg_functions[ffmpeg_index](() => resolve());
-                    })
-                );
-            }
-            await Promise.allSettled(ffmpeg_promises);
-        }
-        console.log(`Completed batch: ${batch_count}`);
-        batch = await ytpl.continueReq(batch.continuation!);
+    action_on_batch(batch, batch_count)
+    delay(5000)
+    while (batch.continuation) {
+        batch = await ytpl.continueReq(batch.continuation);
         batch_count++;
+        action_on_batch(batch, batch_count)
         delay(5000)
-    } while (batch.continuation);
+    }
 }
 
 async function main() {
